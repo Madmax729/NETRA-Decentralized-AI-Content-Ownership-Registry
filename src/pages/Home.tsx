@@ -2,16 +2,29 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import SpaceGeometryBackground from '@/components/SpaceGeometryBackground';
-import { Shield, CheckCircle, Upload, CheckCircle as Verify, Search, Wand2, ArrowRight, CheckCircle as Check } from 'lucide-react';
+import HoudiniParticles from '@/components/HoudiniParticles';
+import { Shield, CheckCircle, Upload, Search, Wand2, ArrowRight, CheckCircle as Check, ShoppingBag, GitBranch } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
 const Home = () => {
   const { connect, isConnecting, switchAccount, address } = useWallet();
   const features = [
     {
+      icon: ShoppingBag,
+      title: 'NFT Marketplace',
+      description: 'Browse, discover, and collect protected digital assets with verified provenance.',
+      href: '/marketplace',
+    },
+    {
+      icon: GitBranch,
+      title: 'Content Provenance',
+      description: 'Track complete ownership history and verify authenticity of any digital asset.',
+      href: '/provenance',
+    },
+    {
       icon: Shield,
       title: 'Blind Watermarking',
-      description: 'Embed invisible watermarks into images and videos for ownership verification.',
+      description: 'Embed invisible watermarks into images, videos, and audio for ownership verification.',
       href: '/watermark',
     },
     {
@@ -52,6 +65,7 @@ const Home = () => {
   return (
     <div className="min-h-screen relative">
       <SpaceGeometryBackground />
+      <HoudiniParticles />
       
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8">
@@ -68,9 +82,9 @@ const Home = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link to="/dashboard">
+              <Link to="/marketplace">
                 <Button size="lg" className="btn-primary text-lg px-8 py-6">
-                  Get Started
+                  Explore Marketplace
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
@@ -85,7 +99,7 @@ const Home = () => {
       </section>
 
       {/* Features Grid */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-foreground mb-4">
@@ -96,7 +110,7 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {features.map((feature, index) => (
               <Link key={feature.title} to={feature.href} className="group">
                 <Card className="glass-card hover:scale-105 transition-all duration-300 h-full">
@@ -110,7 +124,7 @@ const Home = () => {
                     <h3 className="text-xl font-semibold text-foreground mb-2">
                       {feature.title}
                     </h3>
-                    <p className="text-muted-foreground leading-relaxed">
+                    <p className="text-muted-foreground leading-relaxed text-sm">
                       {feature.description}
                     </p>
                   </CardContent>
@@ -122,7 +136,7 @@ const Home = () => {
       </section>
 
       {/* Benefits Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -143,9 +157,9 @@ const Home = () => {
               </div>
 
               <div className="mt-8">
-                <Link to="/dashboard">
+                <Link to="/wallet">
                   <Button size="lg" className="btn-primary">
-                    Start Protecting Your Content
+                    View Your Wallet
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </Link>
@@ -189,7 +203,7 @@ const Home = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           <Card className="glass-card p-12">
             <h2 className="text-4xl font-bold text-foreground mb-4">
@@ -198,9 +212,9 @@ const Home = () => {
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Join the future of digital content protection with blockchain-powered ownership registry.
             </p>
-            <Link to="/dashboard">
+            <Link to="/watermark">
               <Button size="lg" className="btn-primary text-lg px-10 py-6">
-                Launch Dashboard
+                Start Protecting Content
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </Link>

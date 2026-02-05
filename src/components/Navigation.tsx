@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, Home, Upload, CheckCircle, Search, Wand2, LayoutDashboard } from 'lucide-react';
+import { Shield, Menu, X, Home, Upload, CheckCircle, Search, Wand2, Wallet, ShoppingBag, GitBranch } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
 const Navigation = () => {
@@ -11,12 +11,14 @@ const Navigation = () => {
 
   const navItems = [
     { name: 'Home', href: '/', icon: Home },
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag },
+    { name: 'Provenance', href: '/provenance', icon: GitBranch },
+    { name: 'Wallet', href: '/wallet', icon: Wallet },
     { name: 'Watermark', href: '/watermark', icon: Shield },
     { name: 'Verify', href: '/verify', icon: CheckCircle },
     { name: 'IPFS Upload', href: '/ipfs', icon: Upload },
     { name: 'AI Generate', href: '/generate', icon: Wand2 },
-    { name: 'Plagiarism Check', href: '/plagiarism', icon: Search },
+    { name: 'Plagiarism', href: '/plagiarism', icon: Search },
   ];
 
   const isActive = (href: string) => location.pathname === href;
@@ -34,7 +36,7 @@ const Navigation = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-1">
+          <div className="hidden lg:flex items-center space-x-1">
             {navItems.map((item) => (
               <Link
                 key={item.name}
@@ -51,15 +53,15 @@ const Navigation = () => {
             ))}
           </div>
 
-{/* Connect Wallet Button */}
-          <div className="hidden md:flex items-center space-x-4">
+          {/* Connect Wallet Button */}
+          <div className="hidden lg:flex items-center space-x-4">
             <Button className="btn-glass" onClick={connect} disabled={isConnecting}>
               {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
             </Button>
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          <div className="lg:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="glass p-2 rounded-lg"
@@ -71,7 +73,7 @@ const Navigation = () => {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="md:hidden py-4 space-y-2">
+          <div className="lg:hidden py-4 space-y-2">
             {navItems.map((item) => (
               <Link
                 key={item.name}
