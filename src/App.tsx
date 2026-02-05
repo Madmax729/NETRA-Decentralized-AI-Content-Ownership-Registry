@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Navigation from "./components/Navigation";
 import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
+import NFTMarketplace from "./pages/NFTMarketplace";
+import Provenance from "./pages/Provenance";
+import WalletDetails from "./pages/WalletDetails";
 import Watermark from "./pages/Watermark";
 import Verify from "./pages/Verify";
 import IPFS from "./pages/IPFS";
@@ -22,7 +24,9 @@ function AnimatedRoutes() {
     <div key={location.pathname} className="animate-fade-in">
       <Routes location={location}>
         <Route path="/" element={<Home />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/marketplace" element={<NFTMarketplace />} />
+        <Route path="/provenance" element={<Provenance />} />
+        <Route path="/wallet" element={<WalletDetails />} />
         <Route path="/watermark" element={<Watermark />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/ipfs" element={<IPFS />} />
