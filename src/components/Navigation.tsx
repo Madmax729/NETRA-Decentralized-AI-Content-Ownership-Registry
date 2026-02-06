@@ -7,7 +7,7 @@ import { useWallet } from '@/hooks/use-wallet';
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const { address, isConnecting, connect } = useWallet();
+  const { address, isConnecting, connect, switchAccount } = useWallet();
 
   const navItems = [
     { name: 'Home', href: '/', icon: Home },
@@ -55,7 +55,11 @@ const Navigation = () => {
 
           {/* Connect Wallet Button */}
           <div className="hidden lg:flex items-center space-x-4">
-            <Button className="btn-glass" onClick={connect} disabled={isConnecting}>
+            <Button 
+              className="btn-glass" 
+              onClick={address ? switchAccount : connect} 
+              disabled={isConnecting}
+            >
               {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
             </Button>
           </div>
@@ -90,7 +94,11 @@ const Navigation = () => {
               </Link>
             ))}
             <div className="pt-2 border-t border-glass-border">
-              <Button className="btn-glass w-full" onClick={connect} disabled={isConnecting}>
+              <Button 
+                className="btn-glass w-full" 
+                onClick={address ? switchAccount : connect} 
+                disabled={isConnecting}
+              >
                 {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
               </Button>
             </div>
