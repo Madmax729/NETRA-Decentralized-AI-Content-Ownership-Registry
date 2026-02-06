@@ -221,8 +221,13 @@ const WalletDetails = () => {
 
                 {/* Actions */}
                 <div className="p-4 rounded-lg bg-white/5 flex items-center justify-center">
-                  <Button variant="outline" className="btn-glass" onClick={switchAccount}>
-                    Switch Account
+                  <Button
+                    variant="outline"
+                    className="btn-glass"
+                    onClick={address ? switchAccount : connect}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? "Switching..." : "Switch Account"}
                   </Button>
                 </div>
               </div>

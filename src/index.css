@@ -203,6 +203,27 @@
     @apply glass text-foreground hover:bg-black/5 transition-all duration-300;
   }
 
+  /* Houdini paint-worklet background (Home hero ambience) */
+  .netra-antigravity-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background-image: paint(netra-antigravity);
+    background-repeat: no-repeat;
+    background-size: cover;
+
+    mix-blend-mode: screen;
+    opacity: 0.9;
+
+    /* Worklet inputs */
+    --mouse-x: 0;
+    --mouse-y: 0;
+    --t: 0;
+    --particle-color: hsl(var(--foreground) / 0.9);
+  }
+
   /* Hero dark theme utilities */
   .theme-hero-dark {
     /* Override semantic tokens locally for the hero */

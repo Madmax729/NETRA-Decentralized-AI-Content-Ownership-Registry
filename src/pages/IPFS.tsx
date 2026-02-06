@@ -42,63 +42,101 @@ const IPFS = () => {
   //   }, 3000);
   // };
   const uploadToIPFS = async () => {
-  if (!selectedFile) return;
+    if (!selectedFile) return;
 
-  setIsUploading(true);
+    const pinataJwt = import.meta.env.VITE_PINATA_JWT as string | undefined;
+    if (!pinataJwt) {
+      alert("Pinata JWT is missing. Please configure VITE_PINATA_JWT.");
+      return;
+    }
 
-  try {
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    setIsUploading(true);
 
-    // Add metadata (optional but good for tracking)
-    const metadata = JSON.stringify({
-      name: selectedFile.name,
-      keyvalues: {
-        description,
-        uploadTime: new Date().toISOString(),
+    try {
+      // Quick auth check (helps debug "not reflecting in Pinata")
+      const authRes = await fetch("https://api.pinata.cloud/data/testAuthentication", {
+        headers: {
+          Authorization: `Bearer ${pinataJwt}`,
+        },
+      });
+      if (!authRes.ok) throw new Error("Pinata authentication failed");
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const metadata = JSON.stringify({
+        // Pinata may normalize names; keep a unique suffix for easier dashboard search.
+        name: `${selectedFile.name} • ${new Date().toISOString()}`,
+        keyvalues: {
+          description,
+          uploadTime: new Date().toISOString(),
+          fileSize: selectedFile.size,
+        },
+      });
+      formData.append("pinataMetadata", metadata);
+
+      formData.append(
+        "pinataOptions",
+        JSON.stringify({
+          cidVersion: 1,
+        })
+      );
+
+      const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pinataJwt}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Upload failed (${res.status}): ${text}`);
+      }
+
+      const data = await res.json();
+
+      // Confirm Pinata can find it in the account (helps users verify dashboard sync)
+      let pinListCount: number | null = null;
+      try {
+        const listRes = await fetch(
+          `https://api.pinata.cloud/data/pinList?hashContains=${encodeURIComponent(data.IpfsHash)}&status=pinned`,
+          {
+            headers: { Authorization: `Bearer ${pinataJwt}` },
+          }
+        );
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          pinListCount = typeof listData?.count === "number" ? listData.count : null;
+        }
+      } catch {
+        // ignore
+      }
+
+      const fakeTransactionHash = "0x" + crypto.randomUUID().replace(/-/g, "").slice(0, 64);
+
+      setUploadResult({
+        ipfsHash: data.IpfsHash,
+        gatewayUrl: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
+        transactionHash: fakeTransactionHash,
         fileSize: selectedFile.size,
-      },
-    });
-    formData.append('pinataMetadata', metadata);
-
-    // Add options (optional)
-    const options = JSON.stringify({
-      cidVersion: 1,
-    });
-    formData.append('pinataOptions', options);
-
-    // 🔐 Replace with your JWT token (do NOT expose API Key/Secret in frontend)
-    const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
-      method: 'POST',
-      headers: {
-        // Authorization: `Bearer YOUR_PINATA_JWT_HERE`,
-        Authorization: `Bearer ${import.meta.env.VITE_PINATA_JWT}`,
-
-      },
-      body: formData,
-    });
-
-    if (!res.ok) throw new Error('Upload failed');
-
-    const data = await res.json();
-
-    // You can generate a mock transaction hash (if you’re logging to blockchain later)
-    const fakeTransactionHash = '0x' + crypto.randomUUID().replace(/-/g, '').slice(0, 64);
-
-    setUploadResult({
-      ipfsHash: data.IpfsHash,
-      gatewayUrl: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
-      transactionHash: fakeTransactionHash,
-      fileSize: selectedFile.size,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('IPFS upload error:', error);
-    alert('Upload failed. Please check console.');
-  } finally {
-    setIsUploading(false);
-  }
-};
+        timestamp: new Date().toISOString(),
+        pinata: {
+          id: data.ID,
+          name: data.Name,
+          pinnedAt: data.Timestamp,
+          isDuplicate: Boolean(data.isDuplicate),
+          pinListCount,
+        },
+      });
+    } catch (error) {
+      console.error("IPFS upload error:", error);
+      alert("Upload failed. Please check console.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
 
   const copyToClipboard = (text: string) => {
@@ -272,6 +310,75 @@ const IPFS = () => {
                             <LinkIcon className="w-3 h-3" />
                           </Button>
                         </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium text-foreground">Pinata</Label>
+                          <div className="flex items-center gap-2">
+                            {uploadResult.pinata?.isDuplicate ? (
+                              <Badge variant="secondary" className="border border-border bg-muted text-muted-foreground">
+                                Duplicate
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="border border-border bg-muted text-muted-foreground">
+                                New pin
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="btn-glass"
+                              onClick={() => window.open('https://app.pinata.cloud/pinmanager', '_blank')}
+                            >
+                              Open Dashboard
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Input
+                            value={uploadResult.pinata?.id ?? ''}
+                            readOnly
+                            className="glass font-mono text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="btn-glass"
+                            onClick={() => copyToClipboard(uploadResult.pinata?.id ?? '')}
+                            disabled={!uploadResult.pinata?.id}
+                          >
+                            <Copy className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        {(uploadResult.pinata?.name || uploadResult.pinata?.pinnedAt) && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {uploadResult.pinata?.name ? (
+                              <>
+                                Name: <span className="font-mono">{uploadResult.pinata.name}</span>
+                              </>
+                            ) : null}
+                            {uploadResult.pinata?.pinnedAt ? (
+                              <>
+                                {uploadResult.pinata?.name ? " • " : ""}Pinned: {new Date(uploadResult.pinata.pinnedAt).toLocaleString()}
+                              </>
+                            ) : null}
+                          </p>
+                        )}
+
+                        {typeof uploadResult.pinata?.pinListCount === 'number' && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Pinata pinList matches: {uploadResult.pinata.pinListCount}
+                          </p>
+                        )}
+
+                        {uploadResult.pinata?.isDuplicate && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Pinata marked this upload as a duplicate, so it may not appear as a new item in your dashboard.
+                          </p>
+                        )}
                       </div>
                     </div>
 
