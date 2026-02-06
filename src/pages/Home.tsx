@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import SpaceGeometryBackground from '@/components/SpaceGeometryBackground';
-import HoudiniParticles from '@/components/HoudiniParticles';
+import AntigravityHoudiniBackground from '@/components/AntigravityHoudiniBackground';
 import { Shield, CheckCircle, Upload, Search, Wand2, ArrowRight, CheckCircle as Check, ShoppingBag, GitBranch } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
@@ -65,7 +65,7 @@ const Home = () => {
   return (
     <div className="min-h-screen relative">
       <SpaceGeometryBackground />
-      <HoudiniParticles />
+      <AntigravityHoudiniBackground />
       
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8">

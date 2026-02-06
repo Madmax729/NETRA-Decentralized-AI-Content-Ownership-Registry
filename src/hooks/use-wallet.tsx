@@ -45,10 +45,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const requestAccountsWithPermissions = useCallback(async (): Promise<string[] | null> => {
     const eth = (window as any).ethereum;
     if (!eth) return null;
-    // This opens MetaMask account selection UI even if already connected
-    await eth.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
-    const accounts: string[] = await eth.request({ method: "eth_accounts" });
-    return accounts;
+
+    // Prefer permission-based flow (shows account picker), but fall back for wallets that don't support it.
+    try {
+      await eth.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+      const accounts: string[] = await eth.request({ method: "eth_accounts" });
+      return accounts;
+    } catch (e) {
+      // Fallback: prompts account selection in most wallets
+      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
+      return accounts;
+    }
   }, []);
 
   const connect = useCallback(async () => {
@@ -79,14 +86,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [requestAccountsWithPermissions, setAccounts]);
 
   const switchAccount = useCallback(async () => {
-    // Re-open the MetaMask permissions UI so user can pick another account
+    if (!window.ethereum) {
+      alert("Please install MetaMask to connect your wallet");
+      return null;
+    }
+
     try {
+      setState((s) => ({ ...s, isConnecting: true }));
       const accounts = await requestAccountsWithPermissions();
       if (accounts) setAccounts(accounts);
       return accounts?.[0] ?? null;
     } catch (e) {
       console.error("Switch account failed:", e);
       return null;
+    } finally {
+      setState((s) => ({ ...s, isConnecting: false }));
     }
   }, [requestAccountsWithPermissions, setAccounts]);
 
