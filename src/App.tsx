@@ -11,6 +11,7 @@ import Watermark from "./pages/Watermark";
 import Verify from "./pages/Verify";
 import IPFS from "./pages/IPFS";
 import Plagiarism from "./pages/Plagiarism";
+import Automation from "./pages/Automation";
 import NotFound from "./pages/NotFound";
 import { WalletProvider } from "@/hooks/use-wallet";
 
@@ -28,6 +29,7 @@ function AnimatedRoutes() {
         <Route path="/verify" element={<Verify />} />
         <Route path="/ipfs" element={<IPFS />} />
         <Route path="/plagiarism" element={<Plagiarism />} />
+        <Route path="/automation" element={<Automation />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

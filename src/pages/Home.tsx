@@ -41,6 +41,12 @@ const Home = () => {
       description: 'Compare content and detect unauthorized usage of your intellectual property.',
       href: '/plagiarism',
     },
+    {
+      icon: Shield,
+      title: 'Automation',
+      description: 'Automated NFT theft detection across Google, YouTube, and X with instant alerts.',
+      href: '/automation',
+    },
   ];
 
   const benefits = [
