@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, Home, Upload, CheckCircle, Search, Wand2, Wallet, ShoppingBag, GitBranch } from 'lucide-react';
+import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
 const Navigation = () => {
@@ -13,11 +13,9 @@ const Navigation = () => {
     { name: 'Home', href: '/', icon: Home },
     { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag },
     { name: 'Provenance', href: '/provenance', icon: GitBranch },
-    { name: 'Wallet', href: '/wallet', icon: Wallet },
     { name: 'Watermark', href: '/watermark', icon: Shield },
     { name: 'Verify', href: '/verify', icon: CheckCircle },
     { name: 'IPFS Upload', href: '/ipfs', icon: Upload },
-    { name: 'AI Generate', href: '/generate', icon: Wand2 },
     { name: 'Plagiarism', href: '/plagiarism', icon: Search },
   ];
 

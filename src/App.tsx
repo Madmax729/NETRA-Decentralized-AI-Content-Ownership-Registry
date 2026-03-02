@@ -7,11 +7,9 @@ import Navigation from "./components/Navigation";
 import Home from "./pages/Home";
 import NFTMarketplace from "./pages/NFTMarketplace";
 import Provenance from "./pages/Provenance";
-import WalletDetails from "./pages/WalletDetails";
 import Watermark from "./pages/Watermark";
 import Verify from "./pages/Verify";
 import IPFS from "./pages/IPFS";
-import Generate from "./pages/Generate";
 import Plagiarism from "./pages/Plagiarism";
 import NotFound from "./pages/NotFound";
 import { WalletProvider } from "@/hooks/use-wallet";
@@ -26,11 +24,9 @@ function AnimatedRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/marketplace" element={<NFTMarketplace />} />
         <Route path="/provenance" element={<Provenance />} />
-        <Route path="/wallet" element={<WalletDetails />} />
         <Route path="/watermark" element={<Watermark />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/ipfs" element={<IPFS />} />
-        <Route path="/generate" element={<Generate />} />
         <Route path="/plagiarism" element={<Plagiarism />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

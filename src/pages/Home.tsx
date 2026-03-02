@@ -1,13 +1,9 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import SpaceGeometryBackground from '@/components/SpaceGeometryBackground';
-import AntigravityHoudiniBackground from '@/components/AntigravityHoudiniBackground';
-import { Shield, CheckCircle, Upload, Search, Wand2, ArrowRight, CheckCircle as Check, ShoppingBag, GitBranch } from 'lucide-react';
-import { useWallet } from '@/hooks/use-wallet';
+import { Shield, CheckCircle, Upload, Search, ArrowRight, CheckCircle as Check, ShoppingBag, GitBranch } from 'lucide-react';
 
 const Home = () => {
-  const { connect, isConnecting, switchAccount, address } = useWallet();
   const features = [
     {
       icon: ShoppingBag,
@@ -45,12 +41,6 @@ const Home = () => {
       description: 'Compare content and detect unauthorized usage of your intellectual property.',
       href: '/plagiarism',
     },
-    {
-      icon: Wand2,
-      title: 'AI Content Generation',
-      description: 'Generate AI content with built-in ownership tracking and watermarking.',
-      href: '/generate',
-    },
   ];
 
   const benefits = [
@@ -63,12 +53,19 @@ const Home = () => {
   ];
 
   return (
-    <div className="min-h-screen relative">
-      <SpaceGeometryBackground />
-      <AntigravityHoudiniBackground />
+    <div className="min-h-screen relative bg-background">
+      {/* Subtle grid background */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage:
+            'linear-gradient(hsl(var(--border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
+        }}
+      />
       
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 z-10">
         <div className="max-w-7xl mx-auto text-center">
           <div className="space-y-8">
             <h1 className="text-5xl sm:text-7xl font-bold tracking-tight py-2 md:py-4">
@@ -110,16 +107,16 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {features.map((feature, index) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((feature) => (
               <Link key={feature.title} to={feature.href} className="group">
                 <Card className="glass-card hover:scale-105 transition-all duration-300 h-full">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <div className="p-3 rounded-xl bg-blockchain-primary/10">
-                        <feature.icon className="w-6 h-6 text-blockchain-primary" />
+                      <div className="p-3 rounded-xl bg-primary/10">
+                        <feature.icon className="w-6 h-6 text-primary" />
                       </div>
-                      <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-blockchain-primary transition-colors" />
+                      <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </div>
                     <h3 className="text-xl font-semibold text-foreground mb-2">
                       {feature.title}
@@ -150,19 +147,10 @@ const Home = () => {
               <div className="space-y-4">
                 {benefits.map((benefit, index) => (
                   <div key={index} className="flex items-center space-x-3">
-                    <Check className="w-5 h-5 text-blockchain-primary flex-shrink-0" />
+                    <Check className="w-5 h-5 text-primary flex-shrink-0" />
                     <span className="text-foreground">{benefit}</span>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-8">
-                <Link to="/wallet">
-                  <Button size="lg" className="btn-primary">
-                    View Your Wallet
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
-                </Link>
               </div>
             </div>
 
@@ -170,8 +158,8 @@ const Home = () => {
               <Card className="glass-card p-8">
                 <div className="space-y-6">
                   <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blockchain-primary/10 mb-4">
-                      <Shield className="w-8 h-8 text-blockchain-primary" />
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                      <Shield className="w-8 h-8 text-primary" />
                     </div>
                     <h3 className="text-2xl font-semibold text-foreground mb-2">
                       Secure & Decentralized
@@ -182,21 +170,17 @@ const Home = () => {
                     </p>
                   </div>
                   
-                  <div className="border-t border-glass-border pt-6">
+                  <div className="border-t border-border pt-6">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Network Status</span>
-                      <span className="flex items-center text-green-500">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                      <span className="flex items-center text-green-600">
+                        <div className="w-2 h-2 bg-green-600 rounded-full mr-2 animate-pulse"></div>
                         Active
                       </span>
                     </div>
                   </div>
                 </div>
               </Card>
-              
-              {/* Floating elements */}
-              <div className="absolute -top-4 -right-4 w-8 h-8 border border-blockchain-primary/30 rotate-45 animate-float"></div>
-              <div className="absolute -bottom-4 -left-4 w-6 h-6 border border-blockchain-secondary/40 animate-float" style={{ animationDelay: '2s' }}></div>
             </div>
           </div>
         </div>
