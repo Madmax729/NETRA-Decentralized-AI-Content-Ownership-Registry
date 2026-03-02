@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch } from 'lucide-react';
+import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch, Eye } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
 const Navigation = () => {
@@ -17,6 +17,7 @@ const Navigation = () => {
     { name: 'Verify', href: '/verify', icon: CheckCircle },
     { name: 'IPFS Upload', href: '/ipfs', icon: Upload },
     { name: 'Plagiarism', href: '/plagiarism', icon: Search },
+    { name: 'Automation', href: '/automation', icon: Eye },
   ];
 
   const isActive = (href: string) => location.pathname === href;
