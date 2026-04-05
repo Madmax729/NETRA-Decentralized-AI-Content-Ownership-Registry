@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import BlockchainBackground from '@/components/BlockchainBackground';
 import { Upload, Link as LinkIcon, Copy, CheckCircle, FileText, Image, Video, Globe } from 'lucide-react';
 
+const STORAGE_KEY = 'netra_ipfs_upload';
+
 const IPFS = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
@@ -14,6 +16,32 @@ const IPFS = () => {
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [description, setDescription] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Restore persisted state on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.uploadResult) setUploadResult(data.uploadResult);
+        if (data.description) setDescription(data.description);
+        // Restore preview from the gateway URL if available
+        if (data.uploadResult?.gatewayUrl) {
+          setPreviewUrl(data.uploadResult.gatewayUrl);
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }, []);
+
+  // Persist state on changes
+  useEffect(() => {
+    if (uploadResult) {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        uploadResult,
+        description,
+      }));
+    }
+  }, [uploadResult, description]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -27,7 +55,7 @@ const IPFS = () => {
 
   // const uploadToIPFS = async () => {
   //   if (!selectedFile) return;
-    
+
   //   setIsUploading(true);
   //   // Simulate IPFS upload
   //   setTimeout(() => {
@@ -159,7 +187,7 @@ const IPFS = () => {
   return (
     <div className="min-h-screen blockchain-bg relative">
       <BlockchainBackground />
-      
+
       <div className="relative pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -250,7 +278,7 @@ const IPFS = () => {
                     className="glass"
                   />
                 </div>
-                
+
                 <Button
                   onClick={uploadToIPFS}
                   disabled={!selectedFile || isUploading}
@@ -422,7 +450,7 @@ const IPFS = () => {
                   <div className="p-4 rounded-lg bg-green-50 border border-green-200">
                     <p className="text-green-800 font-medium mb-2">✓ Successfully stored on IPFS</p>
                     <p className="text-green-700 text-sm">
-                      Your content is now permanently stored on the decentralized network 
+                      Your content is now permanently stored on the decentralized network
                       and recorded on the blockchain for ownership verification.
                     </p>
                   </div>

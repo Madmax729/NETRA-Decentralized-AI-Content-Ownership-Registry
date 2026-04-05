@@ -12,12 +12,12 @@ export class WatermarkProcessor {
     // Generate pseudo-random binary watermark from key
     const watermark: number[] = [];
     let seed = key.seed;
-    
+
     for (let i = 0; i < length; i++) {
       seed = (seed * 9301 + 49297) % 233280;
       watermark.push(seed % 2);
     }
-    
+
     return watermark;
   }
 
@@ -26,7 +26,7 @@ export class WatermarkProcessor {
     const N = matrix.length;
     const M = matrix[0].length;
     const result: number[][] = Array(N).fill(0).map(() => Array(M).fill(0));
-    
+
     for (let u = 0; u < N; u++) {
       for (let v = 0; v < M; v++) {
         let sum = 0;
@@ -42,7 +42,7 @@ export class WatermarkProcessor {
         result[u][v] = (2 / Math.sqrt(N * M)) * cu * cv * sum;
       }
     }
-    
+
     return result;
   }
 
@@ -51,7 +51,7 @@ export class WatermarkProcessor {
     const N = matrix.length;
     const M = matrix[0].length;
     const result: number[][] = Array(N).fill(0).map(() => Array(M).fill(0));
-    
+
     for (let i = 0; i < N; i++) {
       for (let j = 0; j < M; j++) {
         let sum = 0;
@@ -67,7 +67,7 @@ export class WatermarkProcessor {
         result[i][j] = (2 / Math.sqrt(N * M)) * sum;
       }
     }
-    
+
     return result;
   }
 
@@ -108,7 +108,7 @@ export class WatermarkProcessor {
     let watermarkIndex = 0;
 
     const rows = dctCoeffs.length;
-    const cols = dctCoeffs[0].length;
+    const cols = dctCoeffs[0]?.length ?? 0;
 
     for (let i = 0; i < rows && watermarkIndex < watermarkLength; i++) {
       for (let j = 0; j < cols && watermarkIndex < watermarkLength; j++) {
@@ -118,12 +118,12 @@ export class WatermarkProcessor {
         const quantizer = alpha;
         const coefficient = dctCoeffs[i][j];
 
-        // QIM extraction (robust against negative remainders)
-        const mod = ((coefficient % quantizer) + quantizer) % quantizer;
-        // We embedded around q/4 (bit=1) and 3q/4 (bit=0). Pick the closest.
-        const distToOne = Math.abs(mod - quantizer / 4);
-        const distToZero = Math.abs(mod - (3 * quantizer) / 4);
-        const bit = distToOne <= distToZero ? 1 : 0;
+        // QIM extraction: embedding did quantizedValue ± q/4
+        // So we check: if (coeff mod q) is in upper half → bit=1, lower half → bit=0
+        const quantizedBase = Math.round(coefficient / quantizer) * quantizer;
+        const remainder = coefficient - quantizedBase;
+        // positive remainder (> 0) indicates +q/4 was added → bit=1
+        const bit = remainder >= 0 ? 1 : 0;
         extractedWatermark.push(bit);
 
         watermarkIndex++;
@@ -225,7 +225,7 @@ export class WatermarkProcessor {
     // Calculate correlation
     let matches = 0;
     const compareLength = Math.min(extractedWatermark.length, expectedWatermark.length);
-    
+
     for (let i = 0; i < compareLength; i++) {
       if (extractedWatermark[i] === expectedWatermark[i]) {
         matches++;
@@ -233,7 +233,7 @@ export class WatermarkProcessor {
     }
 
     const confidence = matches / compareLength;
-    const isWatermarked = confidence > 0.6; // Slightly lower threshold for better recall
+    const isWatermarked = confidence > 0.55; // threshold for detection
 
     return { isWatermarked, confidence };
   }

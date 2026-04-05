@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch, Eye } from 'lucide-react';
+import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch, Eye, Coins } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 
 const Navigation = () => {
@@ -18,6 +18,7 @@ const Navigation = () => {
     { name: 'IPFS Upload', href: '/ipfs', icon: Upload },
     { name: 'Plagiarism', href: '/plagiarism', icon: Search },
     { name: 'Automation', href: '/automation', icon: Eye },
+    { name: 'Mint NFT', href: '/mint', icon: Coins },
   ];
 
   const isActive = (href: string) => location.pathname === href;
@@ -40,11 +41,10 @@ const Navigation = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
-                  isActive(item.href)
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${isActive(item.href)
                     ? 'bg-white/10 text-blockchain-primary'
                     : 'hover:bg-white/5 text-foreground/80 hover:text-foreground'
-                }`}
+                  }`}
               >
                 <item.icon className="w-4 h-4" />
                 <span>{item.name}</span>
@@ -54,9 +54,9 @@ const Navigation = () => {
 
           {/* Connect Wallet Button */}
           <div className="hidden lg:flex items-center space-x-4">
-            <Button 
-              className="btn-glass" 
-              onClick={address ? switchAccount : connect} 
+            <Button
+              className="btn-glass"
+              onClick={address ? switchAccount : connect}
               disabled={isConnecting}
             >
               {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : (isConnecting ? 'Connecting...' : 'Connect Wallet')}
@@ -82,20 +82,19 @@ const Navigation = () => {
                 key={item.name}
                 to={item.href}
                 onClick={() => setIsOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
-                  isActive(item.href)
+                className={`block px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${isActive(item.href)
                     ? 'bg-white/10 text-blockchain-primary'
                     : 'hover:bg-white/5 text-foreground/80'
-                }`}
+                  }`}
               >
                 <item.icon className="w-4 h-4" />
                 <span>{item.name}</span>
               </Link>
             ))}
             <div className="pt-2 border-t border-glass-border">
-              <Button 
-                className="btn-glass w-full" 
-                onClick={address ? switchAccount : connect} 
+              <Button
+                className="btn-glass w-full"
+                onClick={address ? switchAccount : connect}
                 disabled={isConnecting}
               >
                 {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : (isConnecting ? 'Connecting...' : 'Connect Wallet')}

@@ -12,6 +12,8 @@ import Verify from "./pages/Verify";
 import IPFS from "./pages/IPFS";
 import Plagiarism from "./pages/Plagiarism";
 import Automation from "./pages/Automation";
+import Mint from "./pages/Mint";
+import NFTDetail from "./pages/NFTDetail";
 import NotFound from "./pages/NotFound";
 import { WalletProvider } from "@/hooks/use-wallet";
 
@@ -30,6 +32,8 @@ function AnimatedRoutes() {
         <Route path="/ipfs" element={<IPFS />} />
         <Route path="/plagiarism" element={<Plagiarism />} />
         <Route path="/automation" element={<Automation />} />
+        <Route path="/mint" element={<Mint />} />
+        <Route path="/nft/:tokenId" element={<NFTDetail />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>
