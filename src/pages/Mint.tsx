@@ -185,41 +185,27 @@ const Mint = () => {
     const handleUploadMetadata = useCallback(async () => {
         if (!metadata) return;
 
-        const pinataJwt = import.meta.env.VITE_PINATA_JWT as string | undefined;
-        if (!pinataJwt) {
-            toast({ title: "Pinata JWT missing", description: "Set VITE_PINATA_JWT in your .env file", variant: "destructive" });
-            return;
-        }
-
         setIsUploadingMeta(true);
         try {
-            const payload = {
-                pinataContent: metadata,
-                pinataMetadata: {
-                    name: `netra-metadata-${metadata.name || "untitled"}-${Date.now()}`,
-                },
-                pinataOptions: { cidVersion: 1 },
-            };
-
-            const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+            // Route through Flask backend to avoid Pinata CORS issues
+            const res = await fetch("/api/metadata/upload", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${pinataJwt}`,
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ metadata }),
             });
 
             if (!res.ok) {
-                const errText = await res.text().catch(() => "");
-                throw new Error(`Pinata upload failed (${res.status}): ${errText}`);
+                const errData = await res.json().catch(() => ({ error: `Upload failed (${res.status})` }));
+                throw new Error(errData.error || `Upload failed (${res.status})`);
             }
 
             const data = await res.json();
-            const cid = data.IpfsHash;
+            const cid = data.metadataCID;
 
             setMetadataCID(cid);
-            setMetadataGateway(`https://gateway.pinata.cloud/ipfs/${cid}`);
+            setMetadataGateway(data.gatewayUrl || `https://gateway.pinata.cloud/ipfs/${cid}`);
             markComplete(3);
             toast({ title: "Metadata uploaded to IPFS", description: `CID: ${cid}` });
         } catch (err: any) {

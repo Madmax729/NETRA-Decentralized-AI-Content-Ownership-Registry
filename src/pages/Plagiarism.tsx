@@ -1,610 +1,491 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import BlockchainBackground from '@/components/BlockchainBackground';
-import { Search, Upload, AlertTriangle, CheckCircle, X, ExternalLink, Eye, FileText, Download } from 'lucide-react';
-import { extractTextFromPDF, analyzePlagiarism, generatePlagiarismReportPDF, type PlagiarismReport } from '@/utils/pdfUtils';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Search, Upload, AlertTriangle, CheckCircle, X, ExternalLink,
+  FileText, Download, RotateCcw, Globe, BookOpen, Loader2,
+  ShieldCheck, Eye, ScanLine
+} from 'lucide-react';
+import {
+  submitPlagiarismCheck, generatePlagiarismReportPDF,
+  type PlagiarismReport, type PlagiarismMatch,
+} from '@/utils/pdfUtils';
+import { useBackgroundTasks } from '@/hooks/BackgroundTaskContext';
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+
+const MATCH_COLORS = {
+  direct:      { bg: 'bg-red-500/15',    border: 'border-red-500/40',    text: 'text-red-400',    label: 'Direct Copy',   dot: 'bg-red-500' },
+  paraphrased: { bg: 'bg-orange-500/15', border: 'border-orange-500/40', text: 'text-orange-400', label: 'Paraphrased',   dot: 'bg-orange-500' },
+  similar:     { bg: 'bg-yellow-500/15', border: 'border-yellow-500/40', text: 'text-yellow-400', label: 'Similar',       dot: 'bg-yellow-500' },
+};
+
+function SimilarityGauge({ value }: { value: number }) {
+  const r = 70, stroke = 10, circ = 2 * Math.PI * r;
+  const pct = Math.min(value, 100);
+  const offset = circ - (pct / 100) * circ;
+  const color = pct > 50 ? '#ef4444' : pct > 20 ? '#f59e0b' : '#22c55e';
+  return (
+    <div className="relative w-48 h-48 mx-auto">
+      <svg viewBox="0 0 180 180" className="w-full h-full -rotate-90">
+        <circle cx="90" cy="90" r={r} fill="none" stroke="hsl(var(--border))" strokeWidth={stroke} />
+        <circle cx="90" cy="90" r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          className="transition-all duration-1000" />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-4xl font-bold text-foreground">{pct.toFixed(1)}%</span>
+        <span className="text-xs text-muted-foreground mt-1">Similarity</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Component ──────────────────────────────────────────────────────────── */
 
 const Plagiarism = () => {
-  // Image comparison state
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [comparisonFile, setComparisonFile] = useState<File | null>(null);
-  const [originalPreview, setOriginalPreview] = useState<string>('');
-  const [comparisonPreview, setComparisonPreview] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const originalFileRef = useRef<HTMLInputElement>(null);
-  const comparisonFileRef = useRef<HTMLInputElement>(null);
-  
-  // Research paper state
-  const [researchPaper, setResearchPaper] = useState<File | null>(null);
-  const [isPdfAnalyzing, setIsPdfAnalyzing] = useState(false);
-  const [pdfReport, setPdfReport] = useState<PlagiarismReport | null>(null);
-  const pdfFileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const {
+    startPlagiarismTask,
+    getPlagiarismTask,
+    getPlagiarismResult,
+    clearPlagiarismTask,
+  } = useBackgroundTasks();
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>, type: 'original' | 'comparison') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      
-      if (type === 'original') {
-        setOriginalFile(file);
-        setOriginalPreview(url);
-      } else {
-        setComparisonFile(file);
-        setComparisonPreview(url);
-      }
-      
-      setAnalysisResult(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<PlagiarismMatch | null>(null);
+
+  // Read state from context
+  const task = getPlagiarismTask();
+  const scanning = task?.status === 'processing';
+  const progress = task?.progress ?? 0;
+  const stage = task?.stage ?? '';
+  const error = task?.status === 'error' ? (task.error || 'Analysis failed') : null;
+  const report = getPlagiarismResult();
+
+  // Show toast on completion (only once per task)
+  const lastToastRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (task?.status === 'complete' && task.result && lastToastRef.current !== task.id) {
+      lastToastRef.current = task.id;
+      toast({ title: 'Analysis Complete', description: `Similarity: ${task.result.similarity_index}%` });
+    } else if (task?.status === 'error' && lastToastRef.current !== task.id) {
+      lastToastRef.current = task.id;
+      toast({ title: 'Analysis Failed', description: task.error, variant: 'destructive' });
     }
-  };
+  }, [task?.status, task?.id]);
 
-  const analyzeContent = async () => {
-    if (!originalFile || !comparisonFile) return;
-    
-    setIsAnalyzing(true);
-    // Simulate analysis
-    setTimeout(() => {
-      const similarity = Math.random() * 100;
-      setAnalysisResult({
-        similarity: similarity,
-        status: similarity > 80 ? 'high' : similarity > 50 ? 'medium' : 'low',
-        matches: [
-          {
-            region: 'Top-left corner',
-            confidence: 0.95,
-            coordinates: { x: 10, y: 10, width: 100, height: 100 }
-          },
-          {
-            region: 'Center area',
-            confidence: 0.87,
-            coordinates: { x: 200, y: 150, width: 150, height: 120 }
-          }
-        ],
-        analysis: {
-          pixelSimilarity: similarity,
-          structuralSimilarity: similarity * 0.9,
-          featureMatches: Math.floor(similarity / 10),
-          suspiciousRegions: similarity > 50 ? Math.floor(similarity / 25) : 0
-        },
-        recommendation: similarity > 80 
-          ? 'High plagiarism detected - Content appears to be copied or heavily modified'
-          : similarity > 50 
-          ? 'Moderate similarity - Further investigation recommended'
-          : 'Low similarity - Content appears to be original'
-      });
-      setIsAnalyzing(false);
-    }, 4000);
-  };
-
-  const getSeverityColor = (status: string) => {
-    switch (status) {
-      case 'high': return 'text-red-600 bg-red-50 border-red-200';
-      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'low': return 'text-green-600 bg-green-50 border-green-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
-
-  const getSeverityIcon = (status: string) => {
-    switch (status) {
-      case 'high': return AlertTriangle;
-      case 'medium': return Eye;
-      case 'low': return CheckCircle;
-      default: return Search;
-    }
-  };
-  
-  const handlePdfSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setResearchPaper(file);
-      setPdfReport(null);
-      toast.success('PDF uploaded successfully');
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f && f.type === 'application/pdf') {
+      setFile(f); setSelectedMatch(null);
     } else {
-      toast.error('Please select a valid PDF file');
+      toast({ title: 'Invalid file', description: 'Please select a PDF file.', variant: 'destructive' });
     }
   };
-  
-  const analyzePdfPlagiarism = async () => {
-    if (!researchPaper) {
-      toast.error('Please upload a research paper first');
-      return;
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f?.type === 'application/pdf') {
+      setFile(f); setSelectedMatch(null);
     }
-    
-    setIsPdfAnalyzing(true);
+  }, []);
+
+  const reset = () => {
+    clearPlagiarismTask();
+    setFile(null); setSelectedMatch(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const runScan = async () => {
+    if (!file) return;
     try {
-      const text = await extractTextFromPDF(researchPaper);
-      const report = await analyzePlagiarism(text);
-      setPdfReport(report);
-      toast.success('Analysis complete!');
-    } catch (error) {
-      console.error('PDF analysis failed:', error);
-      toast.error('Analysis failed. Please try again.');
-    } finally {
-      setIsPdfAnalyzing(false);
+      const jobId = await submitPlagiarismCheck(file);
+      startPlagiarismTask(jobId, file.name);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
-  
-  const downloadPdfReport = () => {
-    if (!pdfReport || !researchPaper) return;
-    
-    const blob = generatePlagiarismReportPDF(pdfReport, researchPaper.name);
+
+  const downloadReport = () => {
+    if (!report || !file) return;
+    const blob = generatePlagiarismReportPDF(report, file.name);
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `plagiarism-report-${researchPaper.name}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `netra-plagiarism-report-${file.name}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    toast.success('Report downloaded successfully!');
+    toast({ title: 'Downloaded', description: 'Report saved as PDF.' });
   };
 
+  /* ── Render highlighted document text ────────────────────────────────── */
+  const renderHighlightedText = () => {
+    if (!report) return null;
+    const text = report.full_text;
+    const matches = [...report.matches].sort((a, b) => a.start - b.start);
+
+    const segments: JSX.Element[] = [];
+    let lastEnd = 0;
+
+    matches.forEach((m, i) => {
+      if (m.start > lastEnd) {
+        segments.push(<span key={`t-${i}`}>{text.slice(lastEnd, m.start)}</span>);
+      }
+      const colors = MATCH_COLORS[m.match_type] || MATCH_COLORS.similar;
+      segments.push(
+        <span
+          key={`m-${i}`}
+          className={`${colors.bg} ${colors.border} border-b-2 cursor-pointer rounded-sm px-0.5 
+            hover:opacity-80 transition-opacity`}
+          onClick={() => setSelectedMatch(m)}
+          title={`${m.match_type} — ${(m.similarity * 100).toFixed(0)}% match`}
+        >
+          {text.slice(m.start, m.end)}
+        </span>
+      );
+      lastEnd = m.end;
+    });
+
+    if (lastEnd < text.length) {
+      segments.push(<span key="tail">{text.slice(lastEnd)}</span>);
+    }
+
+    return <div className="text-sm leading-relaxed whitespace-pre-wrap font-mono">{segments}</div>;
+  };
+
+  const simColor = (v: number) => v > 50 ? 'text-red-400' : v > 20 ? 'text-yellow-400' : 'text-green-400';
+
+  /* ─── JSX ───────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen blockchain-bg relative">
-      <BlockchainBackground />
-      
-      <div className="relative pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-foreground mb-4">
-              Plagiarism Detection
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Compare content to detect unauthorized usage and protect your intellectual property
-            </p>
-          </div>
+    <div className="min-h-screen relative bg-background">
+      <div className="fixed inset-0 pointer-events-none z-0" style={{
+        backgroundImage: 'linear-gradient(hsl(var(--border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px)',
+        backgroundSize: '60px 60px',
+      }} />
 
-          <Tabs defaultValue="images" className="space-y-8">
-            <TabsList className="grid w-full grid-cols-2 glass">
-              <TabsTrigger value="images">
-                <Eye className="w-4 h-4 mr-2" />
-                Image Comparison
-              </TabsTrigger>
-              <TabsTrigger value="research">
-                <FileText className="w-4 h-4 mr-2" />
-                Research Papers
-              </TabsTrigger>
-            </TabsList>
+      <div className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-10">
+          <h1 className="text-4xl font-bold text-foreground mb-2 flex items-center gap-3">
+            <ScanLine className="w-9 h-9 text-primary" />
+            Plagiarism Detection
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Upload a research paper (PDF) to detect plagiarism using semantic AI analysis.
+          </p>
+        </div>
 
-            <TabsContent value="images" className="space-y-8">
-              {/* Upload Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Original Content */}
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Upload className="w-5 h-5" />
-                    <span>Original Content</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div
-                    className="border-2 border-dashed border-glass-border rounded-xl p-6 text-center transition-colors hover:border-blockchain-primary/50 cursor-pointer"
-                    onClick={() => originalFileRef.current?.click()}
-                  >
-                    {originalPreview ? (
-                      <div className="space-y-4">
-                        <img
-                          src={originalPreview}
-                          alt="Original content"
-                          className="max-w-full max-h-32 mx-auto rounded-lg"
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          {originalFile?.name}
-                        </p>
+        {/* ─── UPLOAD ZONE ──────────────────────────────────────────────── */}
+        {!report && (
+          <div className="space-y-6">
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Upload Research Paper
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col items-center gap-4">
+                  {file ? (
+                    <div className="relative w-full max-w-lg p-6 border border-border rounded-xl bg-muted/10 text-center">
+                      <button onClick={reset} className="absolute -top-2 -right-2 bg-background border border-border rounded-full p-1 hover:bg-muted transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                      <div className="w-14 h-14 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                        <FileText className="w-7 h-7 text-primary" />
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <Upload className="w-8 h-8 text-blockchain-primary mx-auto" />
-                        <p className="text-foreground font-medium">Upload original content</p>
-                        <p className="text-sm text-muted-foreground">
-                          Images, videos, or documents
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    ref={originalFileRef}
-                    type="file"
-                    accept="image/*,video/*,.pdf,.doc,.docx"
-                    onChange={(e) => handleFileSelect(e, 'original')}
-                    className="hidden"
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Comparison Content */}
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Search className="w-5 h-5" />
-                    <span>Content to Compare</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div
-                    className="border-2 border-dashed border-glass-border rounded-xl p-6 text-center transition-colors hover:border-blockchain-primary/50 cursor-pointer"
-                    onClick={() => comparisonFileRef.current?.click()}
-                  >
-                    {comparisonPreview ? (
-                      <div className="space-y-4">
-                        <img
-                          src={comparisonPreview}
-                          alt="Comparison content"
-                          className="max-w-full max-h-32 mx-auto rounded-lg"
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          {comparisonFile?.name}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <Search className="w-8 h-8 text-blockchain-primary mx-auto" />
-                        <p className="text-foreground font-medium">Upload content to compare</p>
-                        <p className="text-sm text-muted-foreground">
-                          Suspected plagiarized content
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    ref={comparisonFileRef}
-                    type="file"
-                    accept="image/*,video/*,.pdf,.doc,.docx"
-                    onChange={(e) => handleFileSelect(e, 'comparison')}
-                    className="hidden"
-                  />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Analysis Button */}
-            <div className="text-center">
-              <Button
-                onClick={analyzeContent}
-                disabled={!originalFile || !comparisonFile || isAnalyzing}
-                size="lg"
-                className="btn-primary px-8"
-              >
-                <Search className="w-5 h-5 mr-2" />
-                {isAnalyzing ? 'Analyzing Content...' : 'Analyze for Plagiarism'}
-              </Button>
-            </div>
-
-            {/* Analysis Progress */}
-            {isAnalyzing && (
-              <Card className="glass-card">
-                <CardContent className="p-8">
-                  <div className="text-center space-y-6">
-                    <div className="w-12 h-12 border-4 border-blockchain-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <div className="space-y-2">
-                      <p className="text-foreground font-medium">Analyzing content similarity...</p>
-                      <p className="text-sm text-muted-foreground">
-                        Comparing pixels, structure, and features
+                      <p className="font-medium text-foreground">{file.name}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
-                    <Progress value={65} className="w-full max-w-md mx-auto" />
+                  ) : (
+                    <label
+                      className="w-full max-w-lg border-2 border-dashed border-border rounded-xl p-12 text-center cursor-pointer hover:bg-muted/20 hover:border-primary/40 transition-all"
+                      onDragOver={(e) => e.preventDefault()} onDrop={onDrop}
+                    >
+                      <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-sm font-medium text-foreground mb-1">Click to upload or drag & drop</p>
+                      <p className="text-xs text-muted-foreground">PDF files up to 50 MB</p>
+                      <input ref={fileRef} type="file" className="hidden" accept=".pdf" onChange={handleFile} />
+                    </label>
+                  )}
+                </div>
+
+                {/* Progress */}
+                {scanning && (
+                  <div className="space-y-3 max-w-lg mx-auto">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" /> {stage}
+                    </div>
+                    <Progress value={progress} className="w-full" />
+                    <p className="text-xs text-muted-foreground text-right">{progress}%</p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Analysis Results */}
-            {analysisResult && (
-              <div className="space-y-6">
-                {/* Overall Result */}
-                <Card className="glass-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span>Analysis Results</span>
-                      <Badge className={getSeverityColor(analysisResult.status)}>
-                        {(() => {
-                          const Icon = getSeverityIcon(analysisResult.status);
-                          return <Icon className="w-4 h-4 mr-1" />;
-                        })()}
-                        {analysisResult.status.toUpperCase()} SIMILARITY
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="text-center p-6 rounded-xl bg-white/5">
-                      <div className="text-4xl font-bold text-foreground mb-2">
-                        {analysisResult.similarity.toFixed(1)}%
-                      </div>
-                      <p className="text-muted-foreground">Overall Similarity Score</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="text-center p-4 rounded-lg bg-white/5">
-                        <p className="text-2xl font-bold text-blockchain-primary">
-                          {analysisResult.analysis.pixelSimilarity.toFixed(1)}%
-                        </p>
-                        <p className="text-sm text-muted-foreground">Pixel Similarity</p>
-                      </div>
-                      <div className="text-center p-4 rounded-lg bg-white/5">
-                        <p className="text-2xl font-bold text-blockchain-secondary">
-                          {analysisResult.analysis.structuralSimilarity.toFixed(1)}%
-                        </p>
-                        <p className="text-sm text-muted-foreground">Structural Match</p>
-                      </div>
-                      <div className="text-center p-4 rounded-lg bg-white/5">
-                        <p className="text-2xl font-bold text-blockchain-accent">
-                          {analysisResult.analysis.featureMatches}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Feature Matches</p>
-                      </div>
-                    </div>
-
-                    <div className={`p-4 rounded-lg border ${getSeverityColor(analysisResult.status)}`}>
-                      <h4 className="font-medium mb-2">Recommendation</h4>
-                      <p className="text-sm">
-                        {analysisResult.recommendation}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Detailed Matches */}
-                {analysisResult.matches && analysisResult.matches.length > 0 && (
-                  <Card className="glass-card">
-                    <CardHeader>
-                      <CardTitle>Detected Matches</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {analysisResult.matches.map((match: any, index: number) => (
-                          <div key={index} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                            <div>
-                              <p className="font-medium text-foreground">{match.region}</p>
-                              <p className="text-sm text-muted-foreground">
-                                Confidence: {(match.confidence * 100).toFixed(1)}%
-                              </p>
-                            </div>
-                            <Button size="sm" variant="outline" className="btn-glass">
-                              <Eye className="w-3 h-3 mr-1" />
-                              View
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
                 )}
 
-                {/* Actions */}
-                <Card className="glass-card">
-                  <CardHeader>
-                    <CardTitle>Next Steps</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Button className="btn-primary">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Generate Report
-                      </Button>
-                      <Button variant="outline" className="btn-glass">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Save Evidence
-                      </Button>
-                      <Button variant="outline" className="btn-glass">
-                        <Search className="w-4 h-4 mr-2" />
-                        Search Web
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-            </TabsContent>
-
-            <TabsContent value="research" className="space-y-8">
-              {/* PDF Upload */}
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <FileText className="w-5 h-5" />
-                    <span>Upload Research Paper</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div
-                    className="border-2 border-dashed border-glass-border rounded-xl p-12 text-center transition-colors hover:border-blockchain-primary/50 cursor-pointer"
-                    onClick={() => pdfFileRef.current?.click()}
-                  >
-                    {researchPaper ? (
-                      <div className="space-y-4">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-blockchain-primary/10 flex items-center justify-center">
-                          <FileText className="w-8 h-8 text-blockchain-primary" />
-                        </div>
-                        <div>
-                          <p className="text-foreground font-medium">{researchPaper.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {(researchPaper.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setResearchPaper(null);
-                            setPdfReport(null);
-                          }}
-                          className="btn-glass"
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Remove
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-blockchain-primary/10 flex items-center justify-center">
-                          <Upload className="w-8 h-8 text-blockchain-primary" />
-                        </div>
-                        <div>
-                          <p className="text-foreground font-medium">Upload Research Paper</p>
-                          <p className="text-sm text-muted-foreground">
-                            PDF format, up to 50MB
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                {error && (
+                  <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg p-3 max-w-lg mx-auto">
+                    <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
                   </div>
-                  <Input
-                    ref={pdfFileRef}
-                    type="file"
-                    accept=".pdf"
-                    onChange={handlePdfSelect}
-                    className="hidden"
-                  />
-                </CardContent>
-              </Card>
+                )}
 
-              {/* Analysis Button */}
-              <div className="text-center">
-                <Button
-                  onClick={analyzePdfPlagiarism}
-                  disabled={!researchPaper || isPdfAnalyzing}
-                  size="lg"
-                  className="btn-primary px-8"
-                >
-                  <Search className="w-5 h-5 mr-2" />
-                  {isPdfAnalyzing ? 'Analyzing Document...' : 'Check for Plagiarism'}
+                <Button className="btn-primary w-full max-w-lg mx-auto gap-2" onClick={runScan} disabled={scanning || !file}>
+                  {scanning ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</> : <><Search className="w-4 h-4" /> Check for Plagiarism</>}
                 </Button>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Analysis Progress */}
-              {isPdfAnalyzing && (
-                <Card className="glass-card">
-                  <CardContent className="p-8">
-                    <div className="text-center space-y-6">
-                      <div className="w-12 h-12 border-4 border-blockchain-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                      <div className="space-y-2">
-                        <p className="text-foreground font-medium">Analyzing research paper...</p>
-                        <p className="text-sm text-muted-foreground">
-                          Comparing against millions of academic sources
-                        </p>
-                      </div>
-                      <Progress value={45} className="w-full max-w-md mx-auto" />
+            {/* How it works */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-primary" /> How It Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-4 gap-4">
+                  {[
+                    { s: '1', t: 'Upload', d: 'Upload your research paper in PDF format.', icon: Upload },
+                    { s: '2', t: 'Extract & Embed', d: 'Text is extracted and converted to semantic embeddings.', icon: FileText },
+                    { s: '3', t: 'Compare', d: 'Compared against academic databases using AI similarity.', icon: Search },
+                    { s: '4', t: 'Report', d: 'Get a detailed report with highlighted plagiarized sections.', icon: Eye },
+                  ].map((step) => (
+                    <div key={step.s} className="p-4 rounded-xl border border-border text-center space-y-2 hover:bg-muted/10 transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto font-bold text-sm">{step.s}</div>
+                      <step.icon className="w-5 h-5 mx-auto text-primary" />
+                      <p className="font-medium text-foreground">{step.t}</p>
+                      <p className="text-xs text-muted-foreground">{step.d}</p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-              {/* PDF Report Results */}
-              {pdfReport && (
-                <div className="space-y-6">
-                  {/* Overall Result */}
-                  <Card className="glass-card">
-                    <CardHeader>
-                      <CardTitle className="flex items-center justify-between">
-                        <span>Plagiarism Report</span>
-                        <Badge className={
-                          pdfReport.plagiarismPercentage > 50 
-                            ? 'text-red-600 bg-red-50 border-red-200'
-                            : pdfReport.plagiarismPercentage > 20
-                            ? 'text-yellow-600 bg-yellow-50 border-yellow-200'
-                            : 'text-green-600 bg-green-50 border-green-200'
-                        }>
-                          {pdfReport.plagiarismPercentage > 50 ? (
-                            <AlertTriangle className="w-4 h-4 mr-1" />
-                          ) : pdfReport.plagiarismPercentage > 20 ? (
-                            <Eye className="w-4 h-4 mr-1" />
-                          ) : (
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                          )}
-                          {pdfReport.plagiarismPercentage.toFixed(1)}% PLAGIARISM
-                        </Badge>
+        {/* ─── RESULTS ──────────────────────────────────────────────────── */}
+        {report && (
+          <div className="space-y-6">
+            {/* Stats Header */}
+            <Card className="glass-card">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row items-center gap-8">
+                  {/* Gauge */}
+                  <SimilarityGauge value={report.similarity_index} />
+
+                  {/* Stats */}
+                  <div className="flex-1 space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {[
+                        { label: 'Total Words', value: report.total_words.toLocaleString(), icon: FileText },
+                        { label: 'Pages', value: report.page_count, icon: BookOpen },
+                        { label: 'Matches', value: report.matches.length, icon: AlertTriangle },
+                        { label: 'Sources', value: report.sources.length, icon: Globe },
+                      ].map((s) => (
+                        <div key={s.label} className="p-3 rounded-xl border border-border text-center">
+                          <s.icon className="w-4 h-4 mx-auto text-primary mb-1" />
+                          <p className="text-lg font-bold text-foreground">{s.value}</p>
+                          <p className="text-xs text-muted-foreground">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Breakdown bar */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Source Breakdown</p>
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Internet: {report.breakdown.internet}%</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> Publications: {report.breakdown.publications}%</span>
+                      </div>
+                      <div className="w-full h-3 bg-muted/30 rounded-full overflow-hidden flex">
+                        <div className="bg-blue-500 h-full transition-all" style={{ width: `${report.breakdown.internet}%` }} />
+                        <div className="bg-purple-500 h-full transition-all" style={{ width: `${report.breakdown.publications}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <Button onClick={downloadReport} className="btn-primary gap-2">
+                      <Download className="w-4 h-4" /> Download Report
+                    </Button>
+                    <Button variant="outline" className="btn-glass gap-2" onClick={reset}>
+                      <RotateCcw className="w-4 h-4" /> New Scan
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Document Hash */}
+                <div className="mt-4 p-3 rounded-lg bg-muted/20 border border-border">
+                  <p className="text-xs text-muted-foreground">
+                    <ShieldCheck className="w-3 h-3 inline mr-1" />
+                    Blockchain Verification Hash: <code className="text-foreground font-mono text-xs">{report.document_hash}</code>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tabbed Content */}
+            <Tabs defaultValue="document" className="space-y-4">
+              <TabsList className="glass">
+                <TabsTrigger value="document" className="gap-2">
+                  <Eye className="w-4 h-4" /> Document View
+                  {report.matches.length > 0 && <Badge variant="outline" className="ml-1 text-xs">{report.matches.length}</Badge>}
+                </TabsTrigger>
+                <TabsTrigger value="sources" className="gap-2">
+                  <Globe className="w-4 h-4" /> Sources
+                  {report.sources.length > 0 && <Badge variant="outline" className="ml-1 text-xs">{report.sources.length}</Badge>}
+                </TabsTrigger>
+                <TabsTrigger value="matches" className="gap-2">
+                  <AlertTriangle className="w-4 h-4" /> Match Details
+                </TabsTrigger>
+              </TabsList>
+
+              {/* ── Document View ────────────────────────────────────────── */}
+              <TabsContent value="document">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* Document */}
+                  <Card className="glass-card lg:col-span-2 max-h-[70vh] overflow-y-auto">
+                    <CardHeader className="sticky top-0 bg-background/80 backdrop-blur-sm z-10 border-b border-border">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-primary" /> Document Text
+                        <div className="flex gap-2 ml-auto text-xs">
+                          {(['direct', 'paraphrased', 'similar'] as const).map((t) => (
+                            <span key={t} className="flex items-center gap-1">
+                              <span className={`w-2 h-2 rounded-full ${MATCH_COLORS[t].dot}`} />
+                              {MATCH_COLORS[t].label}
+                            </span>
+                          ))}
+                        </div>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="text-center p-6 rounded-xl bg-white/5">
-                        <div className="text-5xl font-bold text-foreground mb-2">
-                          {pdfReport.plagiarismPercentage.toFixed(1)}%
-                        </div>
-                        <p className="text-muted-foreground">Plagiarism Detected</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="text-center p-4 rounded-lg bg-white/5">
-                          <p className="text-2xl font-bold text-blockchain-primary">
-                            {pdfReport.matches.length}
-                          </p>
-                          <p className="text-sm text-muted-foreground">Matches Found</p>
-                        </div>
-                        <div className="text-center p-4 rounded-lg bg-white/5">
-                          <p className="text-2xl font-bold text-blockchain-secondary">
-                            {pdfReport.totalPages}
-                          </p>
-                          <p className="text-sm text-muted-foreground">Pages Analyzed</p>
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={downloadPdfReport}
-                        className="w-full btn-primary"
-                      >
-                        <Download className="w-5 h-5 mr-2" />
-                        Download Detailed Report (PDF)
-                      </Button>
-                    </CardContent>
+                    <CardContent className="p-4">{renderHighlightedText()}</CardContent>
                   </Card>
 
-                  {/* Matches Preview */}
-                  {pdfReport.matches.length > 0 && (
-                    <Card className="glass-card">
-                      <CardHeader>
-                        <CardTitle>Detected Matches (Preview)</CardTitle>
-                      </CardHeader>
-                      <CardContent>
+                  {/* Source Detail Sidebar */}
+                  <Card className="glass-card max-h-[70vh] overflow-y-auto">
+                    <CardHeader>
+                      <CardTitle className="text-base">Match Details</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {selectedMatch ? (
                         <div className="space-y-4">
-                          {pdfReport.matches.slice(0, 5).map((match, index) => (
-                            <div key={index} className="p-4 rounded-lg bg-red-50/10 border border-red-200/20">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center space-x-2">
-                                  <AlertTriangle className="w-4 h-4 text-red-500" />
-                                  <span className="font-medium text-foreground">
-                                    Match {index + 1}
-                                  </span>
-                                </div>
-                                <Badge className="text-red-600 bg-red-50 border-red-200">
-                                  {(match.confidence * 100).toFixed(0)}% Match
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-muted-foreground mb-2">
-                                {match.text}
-                              </p>
-                              {match.source && (
-                                <p className="text-xs text-muted-foreground italic">
-                                  Source: {match.source}
-                                </p>
-                              )}
+                          <Badge className={`${MATCH_COLORS[selectedMatch.match_type].bg} ${MATCH_COLORS[selectedMatch.match_type].text} ${MATCH_COLORS[selectedMatch.match_type].border} border`}>
+                            {MATCH_COLORS[selectedMatch.match_type].label} — {(selectedMatch.similarity * 100).toFixed(0)}%
+                          </Badge>
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Matched Text</p>
+                            <p className="text-sm text-foreground bg-muted/20 p-3 rounded-lg border border-border">{selectedMatch.text.slice(0, 300)}{selectedMatch.text.length > 300 ? '…' : ''}</p>
+                          </div>
+                          {selectedMatch.source_text && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Source Text</p>
+                              <p className="text-sm text-foreground bg-muted/20 p-3 rounded-lg border border-border italic">{selectedMatch.source_text.slice(0, 300)}{selectedMatch.source_text.length > 300 ? '…' : ''}</p>
                             </div>
-                          ))}
-                          {pdfReport.matches.length > 5 && (
-                            <p className="text-center text-sm text-muted-foreground">
-                              +{pdfReport.matches.length - 5} more matches in full report
-                            </p>
                           )}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Source</p>
+                            <p className="text-sm font-medium text-foreground">{selectedMatch.source_title || 'Unknown'}</p>
+                            {selectedMatch.source && !selectedMatch.source.startsWith('self://') && (
+                              <a href={selectedMatch.source} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
+                                {selectedMatch.source.slice(0, 60)}… <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Click a highlighted section to view match details</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* ── Sources Tab ──────────────────────────────────────────── */}
+              <TabsContent value="sources" className="space-y-3">
+                {report.sources.length === 0 ? (
+                  <Card className="glass-card">
+                    <CardContent className="p-12 text-center">
+                      <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                      <p className="text-muted-foreground">No matching sources found — your content appears original!</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  report.sources.map((src, i) => (
+                    <Card key={i} className="glass-card hover:border-primary/20 transition-colors">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground text-sm">{src.title || 'Untitled Source'}</p>
+                            {src.url && !src.url.startsWith('self://') && (
+                              <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block mt-1">
+                                {src.url} <ExternalLink className="w-3 h-3 inline ml-1" />
+                              </a>
+                            )}
+                          </div>
+                          <Badge variant="outline" className={`shrink-0 ${src.match_percentage > 10 ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'}`}>
+                            {src.match_percentage}% match
+                          </Badge>
                         </div>
                       </CardContent>
                     </Card>
-                  )}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
+                  ))
+                )}
+              </TabsContent>
+
+              {/* ── Match Details Tab ────────────────────────────────────── */}
+              <TabsContent value="matches" className="space-y-3">
+                {report.matches.length === 0 ? (
+                  <Card className="glass-card">
+                    <CardContent className="p-12 text-center">
+                      <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+                      <p className="text-muted-foreground">No plagiarism detected.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  report.matches.map((m, i) => {
+                    const colors = MATCH_COLORS[m.match_type] || MATCH_COLORS.similar;
+                    return (
+                      <Card key={i} className={`glass-card ${colors.border} border-l-4`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                              <span className="font-medium text-foreground text-sm">Match {i + 1}</span>
+                              <Badge variant="outline" className={`text-xs ${colors.bg} ${colors.text} ${colors.border}`}>
+                                {colors.label}
+                              </Badge>
+                            </div>
+                            <span className={`text-sm font-bold ${colors.text}`}>{(m.similarity * 100).toFixed(0)}%</span>
+                          </div>
+                          <p className="text-sm text-foreground/80 mb-2 line-clamp-3">{m.text}</p>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{m.source_title || 'Unknown source'}</span>
+                            {m.source && !m.source.startsWith('self://') && (
+                              <a href={m.source} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                                View Source <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
       </div>
     </div>
   );

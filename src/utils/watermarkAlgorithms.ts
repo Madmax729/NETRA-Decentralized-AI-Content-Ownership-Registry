@@ -1,5 +1,5 @@
 // DCT+QIM+DWT+SVD Watermarking Algorithms
-// This is a simplified implementation for demonstration purposes
+// Robust implementation with proper embed/extract symmetry
 
 export interface WatermarkKey {
   seed: number;
@@ -72,7 +72,8 @@ export class WatermarkProcessor {
   }
 
   private static quantizationBasedModulation(dctCoeffs: number[][], watermark: number[], alpha: number): number[][] {
-    // QIM (Quantization Index Modulation) implementation across available mid-frequency coefficients
+    // QIM (Quantization Index Modulation) implementation
+    // Uses a large quantizer step for robustness against pixel rounding
     const result = dctCoeffs.map(row => [...row]);
     let watermarkIndex = 0;
 
@@ -84,16 +85,17 @@ export class WatermarkProcessor {
         // Skip the DC component
         if (i === 0 && j === 0) continue;
 
-        const quantizer = alpha;
+        const q = alpha;
         const bit = watermark[watermarkIndex];
         const coefficient = result[i][j];
 
-        // QIM embedding
-        const quantizedValue = Math.round(coefficient / quantizer) * quantizer;
+        // QIM embedding: quantize to nearest multiple of q, then add offset based on bit
+        // bit=1 → offset +q/4, bit=0 → offset -q/4
+        const quantizedBase = Math.round(coefficient / q) * q;
         if (bit === 1) {
-          result[i][j] = quantizedValue + quantizer / 4;
+          result[i][j] = quantizedBase + q / 4;
         } else {
-          result[i][j] = quantizedValue - quantizer / 4;
+          result[i][j] = quantizedBase - q / 4;
         }
 
         watermarkIndex++;
@@ -115,14 +117,15 @@ export class WatermarkProcessor {
         // Skip the DC component
         if (i === 0 && j === 0) continue;
 
-        const quantizer = alpha;
+        const q = alpha;
         const coefficient = dctCoeffs[i][j];
 
-        // QIM extraction: embedding did quantizedValue ± q/4
-        // So we check: if (coeff mod q) is in upper half → bit=1, lower half → bit=0
-        const quantizedBase = Math.round(coefficient / quantizer) * quantizer;
+        // QIM extraction: find nearest quantized base, then check the sign of remainder
+        // During embedding: bit=1 → base + q/4, bit=0 → base - q/4
+        // So remainder = coefficient - base; if remainder > 0 → bit=1, else bit=0
+        const quantizedBase = Math.round(coefficient / q) * q;
         const remainder = coefficient - quantizedBase;
-        // positive remainder (> 0) indicates +q/4 was added → bit=1
+        // positive remainder (>= 0) indicates +q/4 was added → bit=1
         const bit = remainder >= 0 ? 1 : 0;
         extractedWatermark.push(bit);
 
@@ -134,15 +137,7 @@ export class WatermarkProcessor {
   }
 
   static async embedWatermark(imageData: ImageData, key: WatermarkKey): Promise<ImageData> {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Cannot create canvas context');
-
-    canvas.width = imageData.width;
-    canvas.height = imageData.height;
-    ctx.putImageData(imageData, 0, 0);
-
-    // Convert to grayscale matrix for processing
+    // Convert to grayscale matrix for processing (sample every 8th pixel)
     const matrix: number[][] = [];
     for (let y = 0; y < imageData.height; y += 8) {
       const row: number[] = [];
@@ -161,36 +156,53 @@ export class WatermarkProcessor {
     // Apply DCT
     const dctMatrix = this.dct2D(matrix);
 
-    // Apply QIM
+    // Apply QIM watermark embedding in DCT domain
     const watermarkedDCT = this.quantizationBasedModulation(dctMatrix, watermark, key.alpha);
 
-    // Apply inverse DCT
+    // Apply inverse DCT to get watermarked spatial values
     const watermarkedMatrix = this.idct2D(watermarkedDCT);
 
-    // Apply watermarked values back to image
+    // Create output image data (start with a copy of the original)
     const newImageData = new ImageData(imageData.width, imageData.height);
     newImageData.data.set(imageData.data);
 
-    for (let y = 0; y < Math.min(watermarkedMatrix.length, imageData.height / 8); y++) {
-      for (let x = 0; x < Math.min(watermarkedMatrix[0].length, imageData.width / 8); x++) {
+    // Apply watermarked values back to the image
+    // KEY FIX: At each sample point (every 8th pixel), set the grayscale to the
+    // exact watermarked value. This ensures that when extraction reads the same
+    // sample points, it gets the correct values back (minus integer rounding noise).
+    // The strength parameter controls how much the surrounding block pixels are modified
+    // for visual imperceptibility, but the sample point itself must carry the full signal.
+    for (let y = 0; y < Math.min(watermarkedMatrix.length, Math.ceil(imageData.height / 8)); y++) {
+      for (let x = 0; x < Math.min(watermarkedMatrix[0].length, Math.ceil(imageData.width / 8)); x++) {
         const blockY = y * 8;
         const blockX = x * 8;
-        if (blockY < imageData.height && blockX < imageData.width) {
-          const baseIdx = (blockY * imageData.width + blockX) * 4;
-          const watermarkedValue = Math.max(0, Math.min(255, watermarkedMatrix[y][x]));
-          const original = (imageData.data[baseIdx] + imageData.data[baseIdx + 1] + imageData.data[baseIdx + 2]) / 3;
-          const diff = watermarkedValue - original;
+        if (blockY >= imageData.height || blockX >= imageData.width) continue;
 
-          // Spread the modification across the entire 8x8 block for stronger embedding
-          for (let by = 0; by < 8 && (blockY + by) < imageData.height; by++) {
-            for (let bx = 0; bx < 8 && (blockX + bx) < imageData.width; bx++) {
-              const idx = ((blockY + by) * imageData.width + (blockX + bx)) * 4;
-              const delta = diff * key.strength;
-              newImageData.data[idx] = Math.max(0, Math.min(255, imageData.data[idx] + delta));
-              newImageData.data[idx + 1] = Math.max(0, Math.min(255, imageData.data[idx + 1] + delta));
-              newImageData.data[idx + 2] = Math.max(0, Math.min(255, imageData.data[idx + 2] + delta));
-              newImageData.data[idx + 3] = imageData.data[idx + 3];
-            }
+        const watermarkedValue = watermarkedMatrix[y][x];
+        const sampleIdx = (blockY * imageData.width + blockX) * 4;
+        const originalGray = (imageData.data[sampleIdx] + imageData.data[sampleIdx + 1] + imageData.data[sampleIdx + 2]) / 3;
+        const diff = watermarkedValue - originalGray;
+
+        // Set the sample point pixel to the exact watermarked grayscale value
+        // This is the critical pixel that extraction will read
+        const clampedValue = Math.max(0, Math.min(255, Math.round(watermarkedValue)));
+        newImageData.data[sampleIdx] = clampedValue;
+        newImageData.data[sampleIdx + 1] = clampedValue;
+        newImageData.data[sampleIdx + 2] = clampedValue;
+        newImageData.data[sampleIdx + 3] = imageData.data[sampleIdx + 3];
+
+        // Spread a scaled modification across the rest of the 8x8 block for visual smoothness
+        for (let by = 0; by < 8 && (blockY + by) < imageData.height; by++) {
+          for (let bx = 0; bx < 8 && (blockX + bx) < imageData.width; bx++) {
+            // Skip the sample point - already set above
+            if (by === 0 && bx === 0) continue;
+
+            const idx = ((blockY + by) * imageData.width + (blockX + bx)) * 4;
+            const delta = diff * key.strength;
+            newImageData.data[idx] = Math.max(0, Math.min(255, Math.round(imageData.data[idx] + delta)));
+            newImageData.data[idx + 1] = Math.max(0, Math.min(255, Math.round(imageData.data[idx + 1] + delta)));
+            newImageData.data[idx + 2] = Math.max(0, Math.min(255, Math.round(imageData.data[idx + 2] + delta)));
+            newImageData.data[idx + 3] = imageData.data[idx + 3];
           }
         }
       }
@@ -200,7 +212,7 @@ export class WatermarkProcessor {
   }
 
   static async extractWatermark(imageData: ImageData, key: WatermarkKey): Promise<{ isWatermarked: boolean; confidence: number }> {
-    // Convert to grayscale matrix
+    // Convert to grayscale matrix (sample every 8th pixel — same as embedding)
     const matrix: number[][] = [];
     for (let y = 0; y < imageData.height; y += 8) {
       const row: number[] = [];
@@ -235,6 +247,8 @@ export class WatermarkProcessor {
     const confidence = matches / compareLength;
     const isWatermarked = confidence > 0.55; // threshold for detection
 
+    console.log(`[Watermark Verify] Extracted ${compareLength} bits, ${matches} matched (${(confidence * 100).toFixed(1)}%)`);
+
     return { isWatermarked, confidence };
   }
 
@@ -249,8 +263,8 @@ export class WatermarkProcessor {
 
     return {
       seed: Math.abs(hash) % 100000,
-      strength: 0.6,
-      alpha: 16.0
+      strength: 0.3,    // Controls surrounding pixel spread (visual smoothness only)
+      alpha: 50.0        // Large quantizer step for robustness against uint8 rounding
     };
   }
 }

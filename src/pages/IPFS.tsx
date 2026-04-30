@@ -53,114 +53,50 @@ const IPFS = () => {
     }
   };
 
-  // const uploadToIPFS = async () => {
-  //   if (!selectedFile) return;
-
-  //   setIsUploading(true);
-  //   // Simulate IPFS upload
-  //   setTimeout(() => {
-  //     setUploadResult({
-  //       ipfsHash: 'QmX7YzKvZjW9Hf2k8P3LmN4oQ5rS6tU7vW8xY9zA1bC2d',
-  //       gatewayUrl: 'https://ipfs.io/ipfs/QmX7YzKvZjW9Hf2k8P3LmN4oQ5rS6tU7vW8xY9zA1bC2d',
-  //       transactionHash: '0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z',
-  //       fileSize: selectedFile.size,
-  //       timestamp: new Date().toISOString(),
-  //     });
-  //     setIsUploading(false);
-  //   }, 3000);
-  // };
   const uploadToIPFS = async () => {
     if (!selectedFile) return;
-
-    const pinataJwt = import.meta.env.VITE_PINATA_JWT as string | undefined;
-    if (!pinataJwt) {
-      alert("Pinata JWT is missing. Please configure VITE_PINATA_JWT.");
-      return;
-    }
 
     setIsUploading(true);
 
     try {
-      // Quick auth check (helps debug "not reflecting in Pinata")
-      const authRes = await fetch("https://api.pinata.cloud/data/testAuthentication", {
-        headers: {
-          Authorization: `Bearer ${pinataJwt}`,
-        },
-      });
-      if (!authRes.ok) throw new Error("Pinata authentication failed");
-
+      // Upload file through the Flask backend proxy (avoids Pinata CORS issues)
       const formData = new FormData();
       formData.append("file", selectedFile);
+      if (description) {
+        formData.append("description", description);
+      }
 
-      const metadata = JSON.stringify({
-        // Pinata may normalize names; keep a unique suffix for easier dashboard search.
-        name: `${selectedFile.name} • ${new Date().toISOString()}`,
-        keyvalues: {
-          description,
-          uploadTime: new Date().toISOString(),
-          fileSize: selectedFile.size,
-        },
-      });
-      formData.append("pinataMetadata", metadata);
-
-      formData.append(
-        "pinataOptions",
-        JSON.stringify({
-          cidVersion: 1,
-        })
-      );
-
-      const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+      const res = await fetch("/api/ipfs/upload", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${pinataJwt}`,
-        },
         body: formData,
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Upload failed (${res.status}): ${text}`);
+        const errData = await res.json().catch(() => ({ error: `Upload failed (${res.status})` }));
+        throw new Error(errData.error || `Upload failed (${res.status})`);
       }
 
       const data = await res.json();
 
-      // Confirm Pinata can find it in the account (helps users verify dashboard sync)
-      let pinListCount: number | null = null;
-      try {
-        const listRes = await fetch(
-          `https://api.pinata.cloud/data/pinList?hashContains=${encodeURIComponent(data.IpfsHash)}&status=pinned`,
-          {
-            headers: { Authorization: `Bearer ${pinataJwt}` },
-          }
-        );
-        if (listRes.ok) {
-          const listData = await listRes.json();
-          pinListCount = typeof listData?.count === "number" ? listData.count : null;
-        }
-      } catch {
-        // ignore
-      }
-
       const fakeTransactionHash = "0x" + crypto.randomUUID().replace(/-/g, "").slice(0, 64);
 
       setUploadResult({
-        ipfsHash: data.IpfsHash,
-        gatewayUrl: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`,
+        ipfsHash: data.ipfsHash,
+        gatewayUrl: data.gatewayUrl,
         transactionHash: fakeTransactionHash,
         fileSize: selectedFile.size,
         timestamp: new Date().toISOString(),
         pinata: {
-          id: data.ID,
-          name: data.Name,
-          pinnedAt: data.Timestamp,
-          isDuplicate: Boolean(data.isDuplicate),
-          pinListCount,
+          id: data.pinata?.id ?? "",
+          name: data.pinata?.name ?? "",
+          pinnedAt: data.pinata?.pinnedAt ?? "",
+          isDuplicate: Boolean(data.pinata?.isDuplicate),
+          pinListCount: data.pinata?.pinListCount ?? null,
         },
       });
     } catch (error) {
       console.error("IPFS upload error:", error);
-      alert("Upload failed. Please check console.");
+      alert(`Upload failed: ${error instanceof Error ? error.message : "Check console for details."}`);
     } finally {
       setIsUploading(false);
     }

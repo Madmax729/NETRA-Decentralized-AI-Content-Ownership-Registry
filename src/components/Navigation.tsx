@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Shield, Menu, X, Home, Upload, CheckCircle, Search, ShoppingBag, GitBranch, Eye, Coins } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
+import BackgroundTaskIndicator from './BackgroundTaskIndicator';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,8 +53,9 @@ const Navigation = () => {
             ))}
           </div>
 
-          {/* Connect Wallet Button */}
-          <div className="hidden lg:flex items-center space-x-4">
+          {/* Background Tasks + Connect Wallet Button */}
+          <div className="hidden lg:flex items-center space-x-3">
+            <BackgroundTaskIndicator />
             <Button
               className="btn-glass"
               onClick={address ? switchAccount : connect}

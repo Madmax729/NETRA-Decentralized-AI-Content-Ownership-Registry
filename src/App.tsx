@@ -16,6 +16,7 @@ import Mint from "./pages/Mint";
 import NFTDetail from "./pages/NFTDetail";
 import NotFound from "./pages/NotFound";
 import { WalletProvider } from "@/hooks/use-wallet";
+import { BackgroundTaskProvider } from "@/hooks/BackgroundTaskContext";
 
 const queryClient = new QueryClient();
 
@@ -47,8 +48,10 @@ const App = () => (
       <Sonner />
       <WalletProvider>
         <BrowserRouter>
-          <Navigation />
-          <AnimatedRoutes />
+          <BackgroundTaskProvider>
+            <Navigation />
+            <AnimatedRoutes />
+          </BackgroundTaskProvider>
         </BrowserRouter>
       </WalletProvider>
     </TooltipProvider>
